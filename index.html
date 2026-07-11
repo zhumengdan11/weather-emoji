@@ -1,0 +1,1423 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>沉浸天气 · 粒子引擎</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/weather-icons/2.0.12/css/weather-icons.min.css" />
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        }
+
+        body {
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 12px;
+            position: relative;
+            overflow: hidden;
+            background: #0a0e1a;
+            transition: background 1.8s ease;
+        }
+
+        .bg-glow {
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(120px);
+            opacity: 0.2;
+            pointer-events: none;
+            z-index: 0;
+            width: 60%;
+            height: 60%;
+            top: -20%;
+            left: -20%;
+            transition: background 2s ease;
+        }
+        .bg-glow:nth-child(2) {
+            top: auto;
+            bottom: -20%;
+            left: auto;
+            right: -20%;
+            width: 50%;
+            height: 50%;
+        }
+
+        #weatherCanvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            pointer-events: none;
+            opacity: 0.85;
+        }
+
+        /* ===== 卡片 ===== */
+        .glass-card {
+            position: relative;
+            z-index: 10;
+            background: rgba(10, 14, 26, 0.7);
+            backdrop-filter: blur(20px) saturate(180%);
+            -webkit-backdrop-filter: blur(20px) saturate(180%);
+            border-radius: 48px;
+            padding: 24px 20px 20px;
+            border: 1.5px solid rgba(255, 255, 255, 0.06);
+            box-shadow: 0 40px 100px rgba(0, 0, 0, 0.5);
+            text-align: center;
+            width: 100%;
+            max-width: 420px;
+            color: #fff;
+            animation: cardEntry 0.8s ease forwards, breatheGlow 4s ease-in-out infinite;
+            opacity: 0;
+            transform: translateY(40px);
+            overflow: visible;
+        }
+
+        @keyframes cardEntry {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes breatheGlow {
+            0%,
+            100% {
+                box-shadow: 0 40px 100px rgba(0, 0, 0, 0.5), 0 0 60px rgba(255, 215, 0, 0.02);
+            }
+            50% {
+                box-shadow: 0 40px 100px rgba(0, 0, 0, 0.5), 0 0 100px rgba(255, 215, 0, 0.06);
+            }
+        }
+
+        .glass-card>* {
+            position: relative;
+            z-index: 1;
+        }
+
+        /* =============================================================
+              3D 角色区域
+            ============================================================= */
+        .character-area {
+            margin: -12px 0 0px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 160px;
+            perspective: 800px;
+        }
+
+        .character-3d {
+            width: 150px;
+            height: 160px;
+            position: relative;
+            transform-style: preserve-3d;
+            animation: charFloat 3s ease-in-out infinite;
+            transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        @keyframes charFloat {
+            0%,
+            100% {
+                transform: translateY(0) rotateY(0deg) rotateX(2deg);
+            }
+            50% {
+                transform: translateY(-10px) rotateY(8deg) rotateX(-3deg);
+            }
+        }
+
+        .char-body {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            transform-style: preserve-3d;
+            animation: charIdle 4s ease-in-out infinite;
+        }
+
+        @keyframes charIdle {
+            0%,
+            100% {
+                transform: rotateY(0deg);
+            }
+            25% {
+                transform: rotateY(10deg);
+            }
+            75% {
+                transform: rotateY(-10deg);
+            }
+        }
+
+        .char-face {
+            font-size: 7rem;
+            line-height: 1;
+            display: block;
+            text-shadow: 0 8px 60px rgba(0, 0, 0, 0.3);
+            animation: facePulse 2s ease-in-out infinite;
+            transform: translateZ(10px);
+        }
+
+        @keyframes facePulse {
+            0%,
+            100% {
+                transform: translateZ(10px) scale(1);
+            }
+            50% {
+                transform: translateZ(25px) scale(1.05);
+            }
+        }
+
+        .char-prop {
+            position: absolute;
+            font-size: 2.6rem;
+            animation: propOrbit 6s linear infinite;
+            filter: drop-shadow(0 4px 30px rgba(255, 215, 0, 0.15));
+        }
+
+        .char-prop:nth-child(2) {
+            top: -12px;
+            right: -25px;
+            animation-duration: 7s;
+            animation-delay: 0.5s;
+        }
+        .char-prop:nth-child(3) {
+            bottom: 5px;
+            left: -30px;
+            animation-duration: 8s;
+            animation-delay: 1s;
+        }
+        .char-prop:nth-child(4) {
+            top: 50%;
+            left: -35px;
+            animation-duration: 5s;
+            animation-delay: 0.2s;
+            font-size: 2rem;
+        }
+        .char-prop:nth-child(5) {
+            bottom: 0px;
+            right: -30px;
+            animation-duration: 9s;
+            animation-delay: 1.5s;
+            font-size: 2.2rem;
+        }
+
+        @keyframes propOrbit {
+            0% {
+                transform: translate(0, 0) rotate(0deg) scale(1);
+            }
+            25% {
+                transform: translate(8px, -14px) rotate(90deg) scale(1.1);
+            }
+            50% {
+                transform: translate(0, -22px) rotate(180deg) scale(0.95);
+            }
+            75% {
+                transform: translate(-8px, -14px) rotate(270deg) scale(1.05);
+            }
+            100% {
+                transform: translate(0, 0) rotate(360deg) scale(1);
+            }
+        }
+
+        .char-glow-ring {
+            position: absolute;
+            width: 200px;
+            height: 200px;
+            top: -20px;
+            left: -25px;
+            border-radius: 50%;
+            border: 2px solid rgba(255, 215, 0, 0.06);
+            animation: ringSpin 12s linear infinite;
+            pointer-events: none;
+        }
+
+        @keyframes ringSpin {
+            0% {
+                transform: rotate(0deg) scale(1);
+            }
+            50% {
+                transform: rotate(180deg) scale(1.05);
+            }
+            100% {
+                transform: rotate(360deg) scale(1);
+            }
+        }
+
+        .char-glow-ring::after {
+            content: '';
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            border: 2px solid rgba(100, 200, 255, 0.04);
+            animation: ringSpin 8s linear infinite reverse;
+        }
+
+        /* =============================================================
+              "今日心情" 大标语
+            ============================================================= */
+        .mood-slogan {
+            font-size: 1.3rem;
+            font-weight: 300;
+            letter-spacing: 1px;
+            margin: -2px 0 6px;
+            padding: 4px 0;
+            background: linear-gradient(135deg, rgba(255, 215, 0, 0.15), rgba(255, 150, 50, 0.05));
+            border-radius: 40px;
+            border: 1px solid rgba(255, 215, 0, 0.04);
+            backdrop-filter: blur(4px);
+            opacity: 0.9;
+            transition: 0.3s;
+            min-height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .mood-slogan span {
+            display: inline-block;
+            animation: sloganPulse 3s ease-in-out infinite;
+        }
+
+        @keyframes sloganPulse {
+            0%,
+            100% {
+                opacity: 0.85;
+                transform: scale(1);
+            }
+            50% {
+                opacity: 1;
+                transform: scale(1.02);
+            }
+        }
+
+        /* ===== 城市 ===== */
+        .city-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0px;
+        }
+        .city {
+            font-size: 1.5rem;
+            font-weight: 300;
+            letter-spacing: 2px;
+            background: linear-gradient(135deg, #fff, rgba(255, 215, 0, 0.4));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .time {
+            font-size: 0.7rem;
+            opacity: 0.4;
+            background: rgba(255, 255, 255, 0.06);
+            padding: 2px 12px;
+            border-radius: 30px;
+            -webkit-text-fill-color: rgba(255, 255, 255, 0.6);
+        }
+
+        /* ===== 温度 ===== */
+        .temp-wrapper {
+            display: flex;
+            align-items: baseline;
+            justify-content: center;
+            gap: 2px;
+            margin: -4px 0 0;
+        }
+        .temp-value {
+            font-size: 5rem;
+            font-weight: 700;
+            line-height: 1;
+            letter-spacing: -2px;
+            background: linear-gradient(135deg, #ffffff, #ffd700);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: tempPulse 3s ease-in-out infinite alternate;
+            filter: drop-shadow(0 0 30px rgba(255, 215, 0, 0.05));
+        }
+
+        @keyframes tempPulse {
+            0% {
+                filter: drop-shadow(0 0 20px rgba(255, 215, 0, 0.05));
+            }
+            100% {
+                filter: drop-shadow(0 0 60px rgba(255, 215, 0, 0.15));
+            }
+        }
+
+        .temp-unit {
+            font-size: 1.6rem;
+            font-weight: 300;
+            opacity: 0.5;
+            -webkit-text-fill-color: rgba(255, 255, 255, 0.5);
+        }
+        .unit-toggle {
+            font-size: 0.6rem;
+            background: rgba(255, 255, 255, 0.06);
+            padding: 2px 8px;
+            border-radius: 20px;
+            cursor: pointer;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            color: rgba(255, 255, 255, 0.4);
+            transition: 0.3s;
+            margin-left: 2px;
+            -webkit-text-fill-color: rgba(255, 255, 255, 0.4);
+        }
+
+        .condition {
+            font-size: 1rem;
+            opacity: 0.8;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin: -2px 0 0px;
+        }
+        .condition .wi {
+            font-size: 1.6rem;
+        }
+        .feels-like {
+            font-size: 0.8rem;
+            opacity: 0.4;
+            margin-bottom: 4px;
+        }
+
+        /* ===== 其他 ===== */
+        .action-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 2px 0 8px;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .dress-tip {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 3px 12px;
+            border-radius: 30px;
+            font-size: 0.7rem;
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            flex: 1;
+            text-align: left;
+            min-height: 26px;
+            display: flex;
+            align-items: center;
+        }
+        .speech-btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            color: #fff;
+            font-size: 0.8rem;
+            padding: 4px 12px;
+            border-radius: 30px;
+            cursor: pointer;
+            transition: 0.3s;
+            white-space: nowrap;
+        }
+        .speech-btn:active {
+            transform: scale(0.92);
+        }
+
+        .mood-tip {
+            display: none;
+        }
+
+        .detail-bars {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin: 6px 0 8px;
+            padding-top: 8px;
+            border-top: 1px solid rgba(255, 255, 255, 0.06);
+        }
+        .bar-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.7rem;
+            opacity: 0.7;
+        }
+        .bar-item .label {
+            width: 40px;
+            text-align: left;
+        }
+        .bar-track {
+            flex: 1;
+            height: 3px;
+            background: rgba(255, 255, 255, 0.06);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .bar-fill {
+            height: 100%;
+            width: 0%;
+            border-radius: 10px;
+            background: linear-gradient(90deg, #f7971e, #ffd200);
+            transition: width 1s ease;
+        }
+        .bar-value {
+            width: 38px;
+            text-align: right;
+            font-weight: 500;
+            font-size: 0.7rem;
+        }
+
+        .extra-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr 1fr;
+            gap: 4px;
+            margin: 6px 0 10px;
+            padding-top: 8px;
+            border-top: 1px solid rgba(255, 255, 255, 0.06);
+        }
+        .extra-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-size: 0.55rem;
+            opacity: 0.4;
+            transition: opacity 0.3s;
+        }
+        .extra-item:hover {
+            opacity: 0.8;
+        }
+        .extra-item .value {
+            font-weight: 600;
+            font-size: 0.85rem;
+            opacity: 0.9;
+            margin-top: 2px;
+        }
+        .extra-item .icon {
+            font-size: 0.9rem;
+            margin-bottom: 2px;
+        }
+
+        .forecast-section {
+            margin: 4px 0 10px;
+            padding-top: 8px;
+            border-top: 1px solid rgba(255, 255, 255, 0.06);
+        }
+        .forecast-title {
+            font-size: 0.55rem;
+            opacity: 0.3;
+            letter-spacing: 2px;
+            margin-bottom: 6px;
+        }
+        .forecast-chart {
+            display: flex;
+            justify-content: space-around;
+            align-items: flex-end;
+            height: 60px;
+            gap: 6px;
+            padding: 4px 0;
+        }
+        .chart-bar-wrap {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+        }
+        .chart-bar-group {
+            display: flex;
+            gap: 2px;
+            align-items: flex-end;
+            height: 50px;
+        }
+        .bar-high {
+            width: 14px;
+            background: linear-gradient(to top, #ffd700, #ff6b6b);
+            border-radius: 5px 5px 0 0;
+            min-height: 8px;
+            transition: height 0.8s ease;
+        }
+        .bar-low {
+            width: 14px;
+            background: linear-gradient(to top, #4ecdc4, #45b7aa);
+            border-radius: 0 0 5px 5px;
+            min-height: 5px;
+            transition: height 0.8s ease;
+        }
+        .chart-label {
+            font-size: 0.5rem;
+            margin-top: 2px;
+            opacity: 0.5;
+            text-align: center;
+        }
+        .chart-day {
+            font-size: 0.5rem;
+            opacity: 0.3;
+            text-align: center;
+        }
+
+        .input-area {
+            display: flex;
+            gap: 6px;
+            margin-top: 2px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .input-area input {
+            flex: 1;
+            min-width: 100px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            padding: 8px 14px;
+            border-radius: 40px;
+            color: #fff;
+            font-size: 0.8rem;
+            outline: none;
+            transition: 0.3s;
+        }
+        .input-area input:focus {
+            border-color: rgba(255, 215, 0, 0.15);
+            background: rgba(255, 255, 255, 0.08);
+        }
+        .input-area input::placeholder {
+            color: rgba(255, 255, 255, 0.3);
+        }
+        .input-area button {
+            background: linear-gradient(135deg, #f7971e, #ffd200);
+            color: #0b0f19;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 40px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: 0.3s;
+            font-size: 0.8rem;
+            min-width: 60px;
+        }
+        .input-area button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .input-area button:active:not(:disabled) {
+            transform: scale(0.95);
+        }
+
+        .quick-cities {
+            display: flex;
+            gap: 4px;
+            justify-content: center;
+            margin-top: 10px;
+            flex-wrap: wrap;
+        }
+        .quick-cities span {
+            background: rgba(255, 255, 255, 0.04);
+            padding: 3px 10px;
+            border-radius: 30px;
+            font-size: 0.6rem;
+            cursor: pointer;
+            transition: 0.3s;
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            opacity: 0.5;
+            color: #fff;
+        }
+        .quick-cities span:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.08);
+            opacity: 1;
+        }
+
+        .footer-note {
+            margin-top: 12px;
+            font-size: 0.45rem;
+            opacity: 0.08;
+            letter-spacing: 3px;
+        }
+
+        .loading-spinner {
+            display: none;
+            margin: 4px auto 0;
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255, 255, 255, 0.04);
+            border-top-color: #ffd200;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        .glass-card.loading .loading-spinner {
+            display: block;
+        }
+        .glass-card.loading {
+            opacity: 0.6;
+            pointer-events: none;
+        }
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* ===== 响应式 ===== */
+        @media (max-width: 400px) {
+            .glass-card {
+                padding: 16px 14px 14px;
+                border-radius: 32px;
+            }
+            .character-area {
+                height: 130px;
+            }
+            .character-3d {
+                width: 120px;
+                height: 130px;
+            }
+            .char-face {
+                font-size: 5.5rem;
+            }
+            .char-prop {
+                font-size: 2rem;
+            }
+            .char-prop:nth-child(4) {
+                font-size: 1.6rem;
+            }
+            .char-prop:nth-child(5) {
+                font-size: 1.8rem;
+            }
+            .char-glow-ring {
+                width: 160px;
+                height: 160px;
+                top: -15px;
+                left: -20px;
+            }
+            .temp-value {
+                font-size: 4.2rem;
+            }
+            .temp-unit {
+                font-size: 1.2rem;
+            }
+            .city {
+                font-size: 1.2rem;
+            }
+            .mood-slogan {
+                font-size: 1rem;
+                padding: 4px 10px;
+                min-height: 30px;
+            }
+            .extra-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+            .forecast-chart {
+                height: 50px;
+            }
+            .chart-bar-group {
+                height: 42px;
+            }
+            .bar-high,
+            .bar-low {
+                width: 12px;
+            }
+        }
+
+        @media (max-width: 360px) {
+            .glass-card {
+                padding: 12px 10px 10px;
+                border-radius: 24px;
+            }
+            .character-area {
+                height: 110px;
+            }
+            .character-3d {
+                width: 100px;
+                height: 110px;
+            }
+            .char-face {
+                font-size: 4.8rem;
+            }
+            .char-prop {
+                font-size: 1.6rem;
+            }
+            .char-prop:nth-child(4) {
+                font-size: 1.2rem;
+            }
+            .char-prop:nth-child(5) {
+                font-size: 1.4rem;
+            }
+            .char-glow-ring {
+                width: 140px;
+                height: 140px;
+                top: -15px;
+                left: -20px;
+            }
+            .temp-value {
+                font-size: 3.6rem;
+            }
+            .temp-unit {
+                font-size: 1rem;
+            }
+            .city {
+                font-size: 1rem;
+            }
+            .mood-slogan {
+                font-size: 0.85rem;
+                padding: 3px 8px;
+                min-height: 26px;
+            }
+            .extra-grid {
+                gap: 2px;
+            }
+            .extra-item .value {
+                font-size: 0.7rem;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="bg-glow" id="glow1"></div>
+    <div class="bg-glow" id="glow2"></div>
+
+    <canvas id="weatherCanvas"></canvas>
+
+    <div class="glass-card" id="weatherCard">
+
+        <!-- ===== 3D 角色区域 ===== -->
+        <div class="character-area">
+            <div class="character-3d" id="character3d">
+                <div class="char-body">
+                    <span class="char-face" id="charFace">😎</span>
+                    <span class="char-prop" id="charProp1">☀️</span>
+                    <span class="char-prop" id="charProp2">✨</span>
+                    <span class="char-prop" id="charProp3">🌟</span>
+                    <span class="char-prop" id="charProp4">🌈</span>
+                </div>
+                <div class="char-glow-ring"></div>
+            </div>
+        </div>
+
+        <!-- ===== 今日心情大标语 ===== -->
+        <div class="mood-slogan" id="moodSlogan">
+            <span id="sloganText">☀️ 今天阳光正好，适合出门走走</span>
+        </div>
+
+        <!-- ===== 卡片内容 ===== -->
+        <div class="city-row">
+            <span class="city" id="cityName">青岛</span>
+            <span class="time" id="currentTime">--:--</span>
+        </div>
+
+        <div class="temp-wrapper">
+            <span class="temp-value" id="tempValue">--</span>
+            <span class="temp-unit" id="tempUnit">°C</span>
+            <span class="unit-toggle" id="unitToggle">°F</span>
+        </div>
+
+        <div class="condition">
+            <i class="wi wi-day-sunny" id="conditionIcon"></i>
+            <span id="conditionText">加载中...</span>
+        </div>
+        <div class="feels-like" id="feelsLikeDisplay">体感 --°C</div>
+
+        <div class="action-row">
+            <span class="dress-tip" id="dressTip">🧥 加载穿搭...</span>
+            <button class="speech-btn" id="speechBtn">🔊 收听</button>
+        </div>
+
+        <div class="mood-tip" id="moodTip">
+            <span id="moodText">☀️ 加载中...</span>
+        </div>
+
+        <div class="detail-bars">
+            <div class="bar-item">
+                <span class="label">💧 湿度</span>
+                <div class="bar-track"><div class="bar-fill" id="humidityBar"></div></div>
+                <span class="bar-value" id="humidityText">--%</span>
+            </div>
+            <div class="bar-item">
+                <span class="label">🌬️ 风速</span>
+                <div class="bar-track"><div class="bar-fill" id="windBar"></div></div>
+                <span class="bar-value" id="windText">-- km/h</span>
+            </div>
+        </div>
+
+        <div class="extra-grid">
+            <div class="extra-item"><span class="icon">☀️</span><span class="value" id="uvValue">--</span><span>紫外线</span></div>
+            <div class="extra-item"><span class="icon">🌀</span><span class="value" id="pressureValue">--</span><span>气压</span></div>
+            <div class="extra-item"><span class="icon">👁️</span><span class="value" id="visibilityValue">--</span><span>能见度</span></div>
+            <div class="extra-item"><span class="icon">🌅</span><span class="value" id="sunriseValue">--</span><span>日出</span></div>
+        </div>
+
+        <div class="forecast-section">
+            <div class="forecast-title">📈 未来三天 · 温度趋势</div>
+            <div class="forecast-chart" id="forecastChart"></div>
+        </div>
+
+        <div class="input-area">
+            <input type="text" id="cityInput" placeholder="输入城市" value="Qingdao" />
+            <button id="searchBtn">⟳ 刷新</button>
+        </div>
+        <div class="quick-cities">
+            <span data-city="Qingdao">🌊 青岛</span>
+            <span data-city="Beijing">🏯 北京</span>
+            <span data-city="Shanghai">🌆 上海</span>
+            <span data-city="Guangzhou">🌴 广州</span>
+            <span data-city="Chengdu">🐼 成都</span>
+            <span data-city="Tokyo">🗼 东京</span>
+        </div>
+        <div class="loading-spinner"></div>
+        <div class="footer-note">🎓 实训结课 · 3D天气角色</div>
+    </div>
+
+    <script>
+        // ================================================================
+        // 天气粒子引擎
+        // ================================================================
+        const canvas = document.getElementById('weatherCanvas');
+        const ctx = canvas.getContext('2d');
+        let W, H;
+        let particles = [];
+        let weatherType = 'clear';
+        let lightningTimer = 0;
+        let flashTimeout = null;
+
+        function resizeCanvas() {
+            W = canvas.width = window.innerWidth;
+            H = canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // ----- 粒子类 -----
+        class Particle {
+            constructor() {
+                this.reset();
+                this.phase = Math.random() * Math.PI * 2;
+            }
+            reset() {
+                this.x = Math.random() * W;
+                this.y = Math.random() * H;
+                this.size = Math.random() * 4 + 2;
+                this.speedX = (Math.random() - 0.5) * 0.8;
+                this.speedY = (Math.random() - 0.5) * 0.8;
+                this.opacity = Math.random() * 0.5 + 0.3;
+                this.type = 'star';
+                this.length = 0;
+
+                if (weatherType === 'rain') {
+                    this.size = Math.random() * 2 + 1.5;
+                    this.length = 12 + Math.random() * 20;
+                    this.speedY = 8 + Math.random() * 10;
+                    this.speedX = (Math.random() - 0.5) * 2;
+                    this.type = 'rain';
+                } else if (weatherType === 'snow') {
+                    this.size = Math.random() * 5 + 3;
+                    this.speedY = 0.6 + Math.random() * 1.2;
+                    this.speedX = (Math.random() - 0.5) * 0.4;
+                    this.type = 'snow';
+                } else if (weatherType === 'cloud') {
+                    this.size = Math.random() * 3 + 2;
+                    this.speedX = (Math.random() - 0.5) * 0.3;
+                    this.speedY = (Math.random() - 0.5) * 0.2;
+                    this.opacity = Math.random() * 0.3 + 0.2;
+                    this.type = 'cloud';
+                } else {
+                    this.type = 'star';
+                    this.size = Math.random() * 4 + 2;
+                }
+            }
+            update() {
+                this.x += this.speedX;
+                this.y += this.speedY;
+                if (this.type === 'rain' || this.type === 'snow') {
+                    if (this.y > H + 30) { this.y = -30;
+                        this.x = Math.random() * W; }
+                    if (this.x > W + 30) this.x = -30;
+                    if (this.x < -30) this.x = W + 30;
+                } else {
+                    if (this.x < 0 || this.x > W) this.speedX *= -1;
+                    if (this.y < 0 || this.y > H) this.speedY *= -1;
+                }
+                if (this.type === 'star') {
+                    this.phase += 0.03;
+                }
+            }
+            draw() {
+                let alpha = this.opacity;
+                if (this.type === 'star') {
+                    alpha = this.opacity * (0.6 + 0.4 * Math.sin(this.phase));
+                }
+                if (this.type === 'rain') {
+                    ctx.beginPath();
+                    ctx.moveTo(this.x, this.y);
+                    ctx.lineTo(this.x + this.speedX * 2, this.y + this.length);
+                    ctx.strokeStyle = `rgba(160, 210, 255, ${alpha * 0.7})`;
+                    ctx.lineWidth = 1.8;
+                    ctx.shadowColor = 'rgba(160, 210, 255, 0.4)';
+                    ctx.shadowBlur = 12;
+                    ctx.stroke();
+                } else if (this.type === 'snow') {
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 0.9})`;
+                    ctx.shadowColor = 'rgba(255, 255, 255, 0.4)';
+                    ctx.shadowBlur = 20;
+                    ctx.fill();
+                } else if (this.type === 'cloud') {
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(200, 210, 220, ${alpha * 0.5})`;
+                    ctx.shadowColor = 'rgba(200, 210, 220, 0.15)';
+                    ctx.shadowBlur = 12;
+                    ctx.fill();
+                } else {
+                    // 五角星
+                    const spikes = 5;
+                    const outer = this.size;
+                    const inner = this.size * 0.4;
+                    let rot = -Math.PI / 2;
+                    const step = Math.PI / spikes;
+                    ctx.beginPath();
+                    for (let i = 0; i < spikes * 2; i++) {
+                        const r = i % 2 === 0 ? outer : inner;
+                        const x = this.x + Math.cos(rot) * r;
+                        const y = this.y + Math.sin(rot) * r;
+                        if (i === 0) ctx.moveTo(x, y);
+                        else ctx.lineTo(x, y);
+                        rot += step;
+                    }
+                    ctx.closePath();
+                    ctx.fillStyle = `rgba(255, 215, 0, ${alpha * 0.8})`;
+                    ctx.shadowColor = 'rgba(255, 215, 0, 0.4)';
+                    ctx.shadowBlur = 25;
+                    ctx.fill();
+                }
+            }
+        }
+
+        // ----- 初始化 -----
+        function initParticles(count) {
+            particles = [];
+            for (let i = 0; i < count; i++) {
+                const p = new Particle();
+                if (weatherType === 'rain' || weatherType === 'snow') {
+                    p.y = Math.random() * H;
+                }
+                particles.push(p);
+            }
+        }
+
+        function setWeather(type) {
+            weatherType = type;
+            let count = 120;
+            if (type === 'rain') count = 200;
+            else if (type === 'snow') count = 160;
+            else if (type === 'cloud') count = 80;
+            else if (type === 'thunder') count = 180;
+            else count = 120;
+            initParticles(count);
+        }
+
+        // ----- 闪电特效 -----
+        function triggerLightning() {
+            if (flashTimeout) return;
+            document.body.style.backgroundColor = 'rgba(255,255,255,0.8)';
+            flashTimeout = setTimeout(() => {
+                document.body.style.backgroundColor = '';
+                flashTimeout = setTimeout(() => {
+                    document.body.style.backgroundColor = 'rgba(255,255,255,0.4)';
+                    flashTimeout = setTimeout(() => {
+                        document.body.style.backgroundColor = '';
+                        flashTimeout = null;
+                    }, 60);
+                }, 100);
+            }, 80);
+        }
+
+        // ----- 动画循环 -----
+        function animateBg() {
+            ctx.clearRect(0, 0, W, H);
+            particles.forEach(p => { p.update();
+                p.draw(); });
+
+            if (weatherType === 'thunder') {
+                lightningTimer += Math.random() * 0.3;
+                if (lightningTimer > 3 + Math.random() * 5) {
+                    triggerLightning();
+                    lightningTimer = 0;
+                }
+            }
+
+            requestAnimationFrame(animateBg);
+        }
+
+        setWeather('clear');
+        animateBg();
+
+        // 暴露给外部
+        function updateParticleWeather(type) {
+            setWeather(type);
+        }
+
+        // ================================================================
+        // 温度切换
+        // ================================================================
+        let currentUnit = 'C';
+        let currentTempC = 0;
+
+        document.getElementById('unitToggle').addEventListener('click', function(e) {
+            e.stopPropagation();
+            const val = document.getElementById('tempValue');
+            const unit = document.getElementById('tempUnit');
+            if (currentUnit === 'C') {
+                val.textContent = Math.round(currentTempC * 9 / 5 + 32);
+                unit.textContent = '°F';
+                this.textContent = '°C';
+                currentUnit = 'F';
+            } else {
+                val.textContent = Math.round(currentTempC);
+                unit.textContent = '°C';
+                this.textContent = '°F';
+                currentUnit = 'C';
+            }
+        });
+
+        // ================================================================
+        // 3D 角色更新
+        // ================================================================
+        function updateCharacter(condition) {
+            const c = condition.toLowerCase();
+            const face = document.getElementById('charFace');
+            const p1 = document.getElementById('charProp1');
+            const p2 = document.getElementById('charProp2');
+            const p3 = document.getElementById('charProp3');
+            const p4 = document.getElementById('charProp4');
+            const ring = document.querySelector('.char-glow-ring');
+
+            let faceEmoji, prop1, prop2, prop3, prop4, ringColor;
+
+            if (c.includes('晴') || c.includes('sunny') || c.includes('clear')) {
+                faceEmoji = '😎';
+                prop1 = '☀️';
+                prop2 = '✨';
+                prop3 = '🌟';
+                prop4 = '🌈';
+                ringColor = 'rgba(255,215,0,0.08)';
+            } else if (c.includes('雷阵雨') || c.includes('thunder') || c.includes('storm')) {
+                faceEmoji = '😨';
+                prop1 = '⚡';
+                prop2 = '🌧️';
+                prop3 = '💨';
+                prop4 = '⛈️';
+                ringColor = 'rgba(100,150,255,0.08)';
+            } else if (c.includes('雨') || c.includes('rain')) {
+                faceEmoji = '☔';
+                prop1 = '🌧️';
+                prop2 = '💧';
+                prop3 = '☂️';
+                prop4 = '🌊';
+                ringColor = 'rgba(100,180,255,0.08)';
+            } else if (c.includes('雪') || c.includes('snow')) {
+                faceEmoji = '⛄';
+                prop1 = '❄️';
+                prop2 = '☃️';
+                prop3 = '🧊';
+                prop4 = '✨';
+                ringColor = 'rgba(200,220,255,0.08)';
+            } else if (c.includes('云') || c.includes('cloud') || c.includes('阴')) {
+                faceEmoji = '😊';
+                prop1 = '☁️';
+                prop2 = '🌤️';
+                prop3 = '💭';
+                prop4 = '🌥️';
+                ringColor = 'rgba(180,190,200,0.08)';
+            } else if (c.includes('雾') || c.includes('mist') || c.includes('fog')) {
+                faceEmoji = '😶‍🌫️';
+                prop1 = '🌫️';
+                prop2 = '💨';
+                prop3 = '🌁';
+                prop4 = '👻';
+                ringColor = 'rgba(150,160,170,0.08)';
+            } else {
+                faceEmoji = '😊';
+                prop1 = '🌤️';
+                prop2 = '✨';
+                prop3 = '🌟';
+                prop4 = '🌈';
+                ringColor = 'rgba(255,215,0,0.08)';
+            }
+
+            face.textContent = faceEmoji;
+            p1.textContent = prop1;
+            p2.textContent = prop2;
+            p3.textContent = prop3;
+            p4.textContent = prop4;
+            ring.style.borderColor = ringColor;
+        }
+
+        // ================================================================
+        // 今日心情标语
+        // ================================================================
+        function getSlogan(temp, condition, cityName) {
+            const c = condition.toLowerCase();
+            const name = cityName || '今天';
+            if (c.includes('晴') || c.includes('sunny') || c.includes('clear')) {
+                if (temp > 30) return `☀️ ${name}阳光太热情，注意防晒多喝水`;
+                if (temp > 25) return `🌊 ${name}晴空万里，去海边走走正好`;
+                return `🌅 ${name}阳光温柔，今天心情一定很好`;
+            }
+            if (c.includes('雨') || c.includes('rain')) {
+                if (temp < 10) return `🌧️ ${name}冷雨天，裹紧被子看电影吧`;
+                return `🎵 ${name}听雨声，喝杯热茶，也是好时光`;
+            }
+            if (c.includes('雪') || c.includes('snow')) {
+                return `⛄ ${name}下雪了！出门记得多穿点`;
+            }
+            if (c.includes('云') || c.includes('cloud') || c.includes('阴')) {
+                if (temp > 25) return `🌤️ ${name}云朵遮阳，户外活动很舒服`;
+                return `🍃 ${name}微风不燥，出去走走刚好`;
+            }
+            if (c.includes('雾') || c.includes('mist') || c.includes('fog')) {
+                return `🌫️ ${name}有雾慢行，注意安全`;
+            }
+            return `🌤️ ${name}天气不错，保持好心情`;
+        }
+
+        // ================================================================
+        // 工具函数
+        // ================================================================
+        function updateMood(condition, temp, cityName) {
+            const norm = Math.min(Math.max((temp + 5) / 40, 0), 1);
+            const r = Math.round(8 + 60 * norm);
+            const g = Math.round(8 + 40 * (1 - norm));
+            const b = Math.round(20 + 70 * (1 - norm));
+            document.body.style.background = `rgb(${r}, ${g}, ${b})`;
+
+            const c = condition.toLowerCase();
+            let c1, c2;
+            if (c.includes('晴') || c.includes('sunny') || c.includes('clear')) {
+                c1 = 'radial-gradient(circle, #f7971e55, transparent 70%)';
+                c2 = 'radial-gradient(circle, #ffd70044, transparent 70%)';
+            } else if (c.includes('雨') || c.includes('rain') || c.includes('thunder') || c.includes('storm')) {
+                c1 = 'radial-gradient(circle, #1a3a5c66, transparent 70%)';
+                c2 = 'radial-gradient(circle, #2d4a6b55, transparent 70%)';
+            } else if (c.includes('雪') || c.includes('snow')) {
+                c1 = 'radial-gradient(circle, #b8c6d455, transparent 70%)';
+                c2 = 'radial-gradient(circle, #d4dce644, transparent 70%)';
+            } else {
+                c1 = 'radial-gradient(circle, #8a9ba855, transparent 70%)';
+                c2 = 'radial-gradient(circle, #a8b5c044, transparent 70%)';
+            }
+            document.getElementById('glow1').style.background = c1;
+            document.getElementById('glow2').style.background = c2;
+
+            updateCharacter(condition);
+
+            // ===== 天气粒子切换 =====
+            let type = 'clear';
+            if (c.includes('雷阵雨') || c.includes('thunder') || c.includes('storm')) {
+                type = 'thunder';
+            } else if (c.includes('雨') || c.includes('rain')) {
+                type = 'rain';
+            } else if (c.includes('雪') || c.includes('snow')) {
+                type = 'snow';
+            } else if (c.includes('阴') || c.includes('overcast') || c.includes('云') || c.includes('cloud')) {
+                type = 'cloud';
+            } else {
+                type = 'clear';
+            }
+            updateParticleWeather(type);
+
+            const slogan = getSlogan(temp, condition, cityName);
+            document.getElementById('sloganText').textContent = slogan;
+        }
+
+        function getDressTip(temp) {
+            if (temp > 30) return '🥵 太热了！短袖+防晒衣，多喝水';
+            if (temp > 25) return '🌞 温暖舒适，穿短袖+薄外套即可';
+            if (temp > 20) return '🌤️ 天气不错，T恤+薄外套正合适';
+            if (temp > 15) return '🧥 微凉，建议穿卫衣或风衣';
+            if (temp > 10) return '🧣 有点冷，穿厚外套+毛衣';
+            if (temp > 5) return '🥶 挺冷的，羽绒服该上场了！';
+            return '❄️ 太冷了！羽绒服+围巾+手套全副武装';
+        }
+
+        function getWeatherIcon(condition) {
+            const c = condition.toLowerCase();
+            if (c.includes('晴') || c.includes('sunny') || c.includes('clear')) return 'wi-day-sunny';
+            if (c.includes('多云') || c.includes('cloudy') || c.includes('partly cloudy')) return 'wi-day-cloudy';
+            if (c.includes('阴') || c.includes('overcast')) return 'wi-cloudy';
+            if (c.includes('雨') || c.includes('rain')) return 'wi-rain';
+            if (c.includes('雪') || c.includes('snow')) return 'wi-snow';
+            if (c.includes('雾') || c.includes('mist') || c.includes('fog')) return 'wi-fog';
+            return 'wi-day-sunny';
+        }
+
+        function getCityDisplayName(city) {
+            const map = {
+                'Qingdao': '青岛',
+                'Beijing': '北京',
+                'Shanghai': '上海',
+                'Guangzhou': '广州',
+                'Chengdu': '成都',
+                'Tokyo': '东京',
+                'Seoul': '首尔',
+                'Singapore': '新加坡',
+                'London': '伦敦',
+                'Paris': '巴黎',
+                'NewYork': '纽约',
+                'Sydney': '悉尼'
+            };
+            return map[city] || city;
+        }
+
+        function renderForecast(forecast) {
+            const chart = document.getElementById('forecastChart');
+            if (!forecast || forecast.length === 0) {
+                chart.innerHTML = '<span style="font-size:0.7rem;opacity:0.3;">暂无预报</span>';
+                return;
+            }
+            const maxVal = Math.max(...forecast.map(f => f.max_temp || 0), 20);
+            const days = ['明天', '后天', '大后天'];
+            chart.innerHTML = forecast.map((f, i) => {
+                const high = (f.max_temp / maxVal) * 50 + 15;
+                const low = (f.min_temp / maxVal) * 45 + 10;
+                return `<div class="chart-bar-wrap">
+                    <div class="chart-bar-group">
+                        <div class="bar-high" style="height:${high}px;"></div>
+                        <div class="bar-low" style="height:${low}px;"></div>
+                    </div>
+                    <div class="chart-label">${Math.round(f.max_temp)}°/${Math.round(f.min_temp)}°</div>
+                    <div class="chart-day">${days[i] || ''}</div>
+                </div>`;
+            }).join('');
+        }
+
+        function speakWeather(data, dressTip) {
+            if (!window.speechSynthesis) return alert('请使用 Chrome 或 Safari');
+            const btn = document.getElementById('speechBtn');
+            btn.textContent = '🔊 播放中...';
+            const text =
+                `现在天气，${data.condition || '未知'}，气温${Math.round(data.temp_c || 0)}度，体感${Math.round(data.feelslike_c || 0)}度，湿度${data.humidity || 0}%。${dressTip || ''}`;
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'zh-CN';
+            utterance.rate = 0.85;
+            utterance.onend = () => { btn.textContent = '🔊 收听'; };
+            utterance.onerror = () => { btn.textContent = '🔊 收听'; };
+            window.speechSynthesis.speak(utterance);
+        }
+
+        // ================================================================
+        // 核心更新
+        // ================================================================
+        function updateUI(data, city) {
+            const temp = data?.temp_c ?? 24;
+            currentTempC = temp;
+            const condition = data?.condition || '晴';
+            const feelslike = data?.feelslike_c ?? temp;
+            const humidity = data?.humidity ?? 60;
+            const wind = data?.wind_kph ?? 12;
+            const pressure = data?.pressure_mb ?? 1010;
+            const uv = data?.uv ?? 5;
+            const visibility = data?.visibility ?? 10;
+            const sunrise = data?.sunrise || '06:30';
+
+            const displayName = getCityDisplayName(city);
+            document.getElementById('cityName').textContent = displayName;
+
+            if (currentUnit === 'C') {
+                document.getElementById('tempValue').textContent = Math.round(temp);
+                document.getElementById('tempUnit').textContent = '°C';
+            } else {
+                document.getElementById('tempValue').textContent = Math.round(temp * 9 / 5 + 32);
+                document.getElementById('tempUnit').textContent = '°F';
+            }
+
+            document.getElementById('conditionIcon').className = `wi ${getWeatherIcon(condition)}`;
+            document.getElementById('conditionText').textContent = condition;
+            document.getElementById('feelsLikeDisplay').textContent = `体感 ${Math.round(feelslike)}°C`;
+
+            document.getElementById('humidityBar').style.width = Math.min(humidity, 100) + '%';
+            document.getElementById('windBar').style.width = Math.min((wind / 50) * 100, 100) + '%';
+            document.getElementById('humidityText').textContent = humidity + '%';
+            document.getElementById('windText').textContent = wind + ' km/h';
+
+            document.getElementById('uvValue').textContent = uv;
+            document.getElementById('pressureValue').textContent = pressure;
+            document.getElementById('visibilityValue').textContent = visibility;
+            document.getElementById('sunriseValue').textContent = sunrise;
+
+            const now = new Date();
+            document.getElementById('currentTime').textContent = now.toLocaleTimeString('zh-CN', { hour: '2-digit',
+                minute: '2-digit' });
+
+            const dressTip = getDressTip(temp);
+            document.getElementById('dressTip').textContent = dressTip;
+
+            document.getElementById('speechBtn').onclick = function() { speakWeather(data, dressTip); };
+
+            if (data?.forecast?.length > 0) {
+                renderForecast(data.forecast);
+            } else {
+                renderForecast([
+                    { max_temp: temp + 2, min_temp: temp - 3 },
+                    { max_temp: temp + 1, min_temp: temp - 4 },
+                    { max_temp: temp, min_temp: temp - 5 }
+                ]);
+            }
+
+            updateMood(condition, temp, displayName);
+        }
+
+        // ================================================================
+        // 数据获取
+        // ================================================================
+        async function fetchWeather(city) {
+            const card = document.getElementById('weatherCard');
+            const btn = document.getElementById('searchBtn');
+            const original = btn.textContent;
+
+            card.classList.add('loading');
+            btn.textContent = '⏳ 加载中...';
+            btn.disabled = true;
+
+            try {
+                const res = await fetch(`/api/weather?city=${encodeURIComponent(city)}`);
+                const data = await res.json();
+                updateUI(data, city);
+            } catch (err) {
+                console.error(err);
+                document.getElementById('conditionText').textContent = '连接异常';
+                document.getElementById('sloganText').textContent = '⚠️ 网络连接失败';
+            } finally {
+                card.classList.remove('loading');
+                btn.textContent = original;
+                btn.disabled = false;
+            }
+        }
+
+        // ================================================================
+        // 事件绑定
+        // ================================================================
+        window.addEventListener('load', function() {
+            const city = document.getElementById('cityInput').value.trim() || 'Qingdao';
+            fetchWeather(city);
+            setInterval(() => {
+                const now = new Date();
+                document.getElementById('currentTime').textContent = now.toLocaleTimeString('zh-CN', { hour: '2-digit',
+                    minute: '2-digit' });
+            }, 1000);
+        });
+
+        document.getElementById('searchBtn').addEventListener('click', function() {
+            const city = document.getElementById('cityInput').value.trim();
+            if (city) fetchWeather(city);
+        });
+
+        document.getElementById('cityInput').addEventListener('keyup', function(e) {
+            if (e.key === 'Enter') document.getElementById('searchBtn').click();
+        });
+
+        document.querySelectorAll('.quick-cities span').forEach(el => {
+            el.addEventListener('click', function() {
+                const city = this.dataset.city;
+                document.getElementById('cityInput').value = city;
+                fetchWeather(city);
+            });
+        });
+    </script>
+</body>
+</html>
